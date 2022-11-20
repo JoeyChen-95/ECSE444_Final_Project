@@ -65,7 +65,7 @@ Src/main.o: ../Src/main.c ../Inc/main.h \
  ../Inc/stm32l4s5i_iot01_psensor.h ../Inc/../Components/lps22hb/lps22hb.h \
  ../Inc/../Components/lps22hb/../Common/psensor.h \
  ../Inc/../Components/lps22hb/../Common/tsensor.h \
- ../Src/../Components/lps22hb/lps22hb.c \
+ ../Inc/stm32l4s5i_iot01_tsensor.h ../Src/../Components/lps22hb/lps22hb.c \
  ../Src/../Components/lps22hb/lps22hb.h \
  ../Src/../Components/lsm6dsl/lsm6dsl.c \
  ../Src/../Components/lsm6dsl/lsm6dsl.h \
@@ -146,6 +146,7 @@ Src/main.o: ../Src/main.c ../Inc/main.h \
 ../Inc/../Components/lps22hb/lps22hb.h:
 ../Inc/../Components/lps22hb/../Common/psensor.h:
 ../Inc/../Components/lps22hb/../Common/tsensor.h:
+../Inc/stm32l4s5i_iot01_tsensor.h:
 ../Src/../Components/lps22hb/lps22hb.c:
 ../Src/../Components/lps22hb/lps22hb.h:
 ../Src/../Components/lsm6dsl/lsm6dsl.c:

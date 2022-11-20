@@ -28,6 +28,7 @@
 #include "stm32l4s5i_iot01_gyro.h"
 #include "stm32l4s5i_iot01_magneto.h"
 #include "stm32l4s5i_iot01_psensor.h"
+#include "stm32l4s5i_iot01_tsensor.h"
 #include "../Components/lps22hb/lps22hb.c"
 #include "../Components/lsm6dsl/lsm6dsl.c"
 #include "../Components/lis3mdl/lis3mdl.c"
@@ -68,14 +69,26 @@ osThreadId read_sensorHandle;
 osThreadId press_buttonHandle;
 osThreadId change_sensorHandle;
 osThreadId send_terminalHandle;
+osThreadId detect_tempHandle;
+osThreadId detect_gyroHandle;
 /* USER CODE BEGIN PV */
 char buffer[100];
 int count = 0;
 float humidity;
 float gyro[3];
+float gyro_x[20];
+float gyro_y[20];
+float gyro_z[20];
+
 int16_t magne[3];
 float pressure;
+float temp;
 int flag = 0;
+
+int tempLevel = 0;//0 no danger, 1 warning, 2 severe, 3 danger.
+int earthquake = 0;
+
+int mode=0;//mode 0: disable detect, mode 1: detect temp, mode 2: detect earthquake
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,6 +104,8 @@ void start_read_sensor(void const * argument);
 void start_press_button(void const * argument);
 void start_change_sensor(void const * argument);
 void start_send_terminal(void const * argument);
+void start_temp(void const * argument);
+void start_detect_gyro(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -112,6 +127,26 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 //		count++;
 		flag = 1;
 	}
+}
+
+void init_gyro_record(){
+	BSP_GYRO_GetXYZ(gyro);
+	for(int i=0;i<20;i++){
+		gyro_x[i]=gyro[0];
+		gyro_y[i]=gyro[1];
+		gyro_z[i]=gyro[2];
+	}
+}
+
+void push_data_into_gyro_record(){
+	for(int i=0;i<19;i++){
+		gyro_x[i]=gyro_x[i+1];
+		gyro_y[i]=gyro_y[i+1];
+		gyro_z[i]=gyro_z[i+1];
+	}
+	gyro_x[19]=gyro[0];
+	gyro_y[19]=gyro[1];
+	gyro_z[19]=gyro[2];
 }
 /* USER CODE END 0 */
 
@@ -215,6 +250,8 @@ int main(void)
   BSP_MAGNETO_Init();
   BSP_GYRO_Init();
   BSP_PSENSOR_Init();
+  BSP_TSENSOR_Init();
+  init_gyro_record();
   
   //Erase 3 blocks prior to write in
 
@@ -299,6 +336,8 @@ int main(void)
 
       HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
 
+      HAL_GPIO_WritePin(RED_LED_GPIO_Port,RED_LED_Pin,1);
+
     	  
     	  
     
@@ -337,6 +376,14 @@ int main(void)
   /* definition and creation of send_terminal */
   osThreadDef(send_terminal, start_send_terminal, osPriorityNormal, 0, 128);
   send_terminalHandle = osThreadCreate(osThread(send_terminal), NULL);
+
+  /* definition and creation of detect_temp */
+  osThreadDef(detect_temp, start_temp, osPriorityRealtime, 0, 128);
+  detect_tempHandle = osThreadCreate(osThread(detect_temp), NULL);
+
+  /* definition and creation of detect_gyro */
+  osThreadDef(detect_gyro, start_detect_gyro, osPriorityRealtime, 0, 128);
+  detect_gyroHandle = osThreadCreate(osThread(detect_gyro), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -825,6 +872,8 @@ void start_read_sensor(void const * argument)
 	BSP_MAGNETO_GetXYZ(magne);
 	BSP_GYRO_GetXYZ(gyro);
 	pressure = BSP_PSENSOR_ReadPressure();
+	temp=BSP_TSENSOR_ReadTemp();
+	push_data_into_gyro_record();
   }
   /* USER CODE END 5 */
 }
@@ -845,7 +894,7 @@ void start_press_button(void const * argument)
 	osDelay(100);
 	if (flag == 1){
 		flag = 0;
-		count++;
+		mode=(mode+1)%3;
 	}
   }
   /* USER CODE END start_press_button */
@@ -865,10 +914,10 @@ void start_change_sensor(void const * argument)
   for(;;)
   {
 	osDelay(30000); //30s
-	if(count == 3) {
-		count =0;
+	if(mode == 3) {
+		mode=0;
 	}else{
-		count++;
+		mode++;
 	}
   }
   /* USER CODE END start_change_sensor */
@@ -891,44 +940,106 @@ void start_send_terminal(void const * argument)
 	for (int i = 0; i < 100; i++){
 		buffer[i] = '\0';
 	}
-	if(count % 4 == 0){
-	    sprintf(buffer, "Humidity is %d \r\n", (int) humidity);
-	} else if (count % 4 == 1){
-	    sprintf(buffer, "Magnetic: %d, %d, %d \r\n", (int) magne[0], (int) magne[1], (int) magne[2]);
-	} else if (count % 4 == 2){
-	    sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) gyro[0], (int) gyro[1], (int) gyro[2]);
-	} else{
-	    sprintf(buffer, "Pressure is %d \r\n", (int) pressure);
-	}
 
-//	switch(sound_counter){
-//	case 0:
-//		sprintf(buffer,"Tone C6 is playing\n");
-//		break;
-//	case 1:
-//		sprintf(buffer,"Tone E6 is playing\n");
-//		break;
-//	case 2:
-//		sprintf(buffer,"Tone G6 is playing\n");
-//	case 3:
-//		sprintf(buffer,"Tone A6 is playing\n");
-//		break;
-//	case 4:
-//		sprintf(buffer,"Tone B6 is playing\n");
-//		break;
-//	case 5:
-//		sprintf(buffer,"Tone is B5 playing\n");
-//		break;
+
+//	if(count % 5 == 0){
+//	    sprintf(buffer, "Humidity is %d \r\n", (int) humidity);
+//	} else if (count % 5 == 1){
+//	    sprintf(buffer, "Magnetic: %d, %d, %d \r\n", (int) magne[0], (int) magne[1], (int) magne[2]);
+//	} else if (count % 5 == 2){
+//	    sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) gyro[0], (int) gyro[1], (int) gyro[2]);
+//	} else if(count % 5 == 3){
+//	    sprintf(buffer, "Pressure is %d \r\n", (int) pressure);
+//	}else{
+//		sprintf(buffer, "Temperature is %d \r\n", (int) temp);
 //	}
 
+	if(mode==1){
+	    if(temp<38){
+	    	sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
+	    }else if(temp>=38&&temp<40){
+	    	sprintf(buffer, "Warning, temperature is %d !!\r\n", (int) temp);
+	    }else if(temp>=40&&temp<45){
+	    	sprintf(buffer, "Danger, temperature is %d !!!!!!\r\n", (int) temp);
+	    }else{
+	    	sprintf(buffer, "Extremely danger, temperature is %d !!!!!!!!!!!!!Please leave the house!!!!!!!!!!\r\n", (int) temp);
+	    }
+	}else if(mode==2){
+		float std_x=0;
+		float std_y=0;
+		float std_z=0;
+		arm_std_f32(&gyro_x,10,&std_x);
+		arm_std_f32(&gyro_y,10,&std_y);
+		arm_std_f32(&gyro_z,10,&std_z);
+		sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) std_x, (int) std_y, (int) std_z);
+	}else{
+		sprintf(buffer, "Detection disabled now. \r\n");
+	}
 
 
+	HAL_Delay(200);
+    HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
+  }
+  /* USER CODE END start_send_terminal */
+}
+
+/* USER CODE BEGIN Header_start_temp */
+/**
+* @brief Function implementing the detect_temp thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_start_temp */
+void start_temp(void const * argument)
+{
+  /* USER CODE BEGIN start_temp */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(100);
+    if(temp<38){
+    	tempLevel=0;
+    }else if(temp>=38&&temp<40){
+    	tempLevel=1;
+    }else if(temp>=40&&temp<45){
+    	tempLevel=2;
+    }else{
+    	tempLevel=3;
+    }
+
+//    if(tempLevel==0){
+//    	sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
+//    }else if(tempLevel==1){
+//    	sprintf(buffer, "Warning, temperature is %d !!\r\n", (int) temp);
+//    }else if(tempLevel==2){
+//    	sprintf(buffer, "Danger, temperature is %d !!!!!!\r\n", (int) temp);
+//    }else{
+//    	sprintf(buffer, "Extremely danger, temperature is %d !!!!!!!!!!!!!Please leave the house!!!!!!!!!!\r\n", (int) temp);
+//    }
 
 
 	HAL_Delay(100);
     HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
   }
-  /* USER CODE END start_send_terminal */
+  /* USER CODE END start_temp */
+}
+
+/* USER CODE BEGIN Header_start_detect_gyro */
+/**
+* @brief Function implementing the detect_gyro thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_start_detect_gyro */
+void start_detect_gyro(void const * argument)
+{
+  /* USER CODE BEGIN start_detect_gyro */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(100);
+  }
+  /* USER CODE END start_detect_gyro */
 }
 
 /**
