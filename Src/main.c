@@ -53,6 +53,10 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+
+#define pi 3.1415926
+#define data_array_size 20
+
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
 DMA_HandleTypeDef hdma_dac1_ch2;
@@ -72,23 +76,26 @@ osThreadId send_terminalHandle;
 osThreadId detect_tempHandle;
 osThreadId detect_gyroHandle;
 /* USER CODE BEGIN PV */
+
 char buffer[100];
 int count = 0;
 float humidity;
 float gyro[3];
-float gyro_x[20];
-float gyro_y[20];
-float gyro_z[20];
+float gyro_x[data_array_size];
+float gyro_y[data_array_size];
+float gyro_z[data_array_size];
 
-int16_t magne[3];
-float pressure;
+//sound waves
+uint8_t C6[42];
+uint8_t E6[34];
+uint8_t G6[28];
+
 float temp;
 int flag = 0;
-
 int tempLevel = 0;//0 no danger, 1 warning, 2 severe, 3 danger.
 int earthquake = 0;
-
 int mode=0;//mode 0: disable detect, mode 1: detect temp, mode 2: detect earthquake
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,13 +116,15 @@ void start_detect_gyro(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
+void init_sound_wave();
+void init_gyro_record();
+void push_data_into_gyro_record();
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-
-#define pi 3.1415926
 uint32_t play[22050]={1};//33075
 uint8_t sound_counter=0;
 
@@ -124,29 +133,63 @@ uint8_t sound_counter=0;
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 	if (GPIO_PIN == GPIO_PIN_13) {
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-//		count++;
 		flag = 1;
 	}
 }
 
+/**
+ * Initialize the warning sound wave.
+ * Level1: with frequency: xxx
+ * Level2: with frequency: xxx
+ * Level3: with frequency: xxx
+ */
+void init_sound_wave(){
+	//Tone 1
+	//C6 1046.5 Hz
+	//sample n = 44.1k/1046.5 = 42
+	for(int i = 0; i < 42; i++){
+		C6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/42))*256;
+	}
+
+	//Tone 2
+	//E6 1318.5 Hz
+	//sample n = 44.1k/1318.5 = 34
+	for(int i = 0; i < 34; i++){
+		E6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/34))*256;
+	}
+
+	//Tone 3
+	//G6 1568.0 Hz
+	//sample n = 44.1k/1568 = 28
+	for(int i = 0; i < 28; i++){
+		G6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/28))*256;
+	}
+}
+
+/**
+ * Initialize the gyro sensor data array.
+ */
 void init_gyro_record(){
 	BSP_GYRO_GetXYZ(gyro);
-	for(int i=0;i<20;i++){
+	for(int i=0;i<data_array_size;i++){
 		gyro_x[i]=gyro[0];
 		gyro_y[i]=gyro[1];
 		gyro_z[i]=gyro[2];
 	}
 }
 
+/**
+ * Update the gyro record.
+ */
 void push_data_into_gyro_record(){
-	for(int i=0;i<19;i++){
+	for(int i=0;i<data_array_size-1;i++){
 		gyro_x[i]=gyro_x[i+1];
 		gyro_y[i]=gyro_y[i+1];
 		gyro_z[i]=gyro_z[i+1];
 	}
-	gyro_x[19]=gyro[0];
-	gyro_y[19]=gyro[1];
-	gyro_z[19]=gyro[2];
+	gyro_x[data_array_size-1]=gyro[0];
+	gyro_y[data_array_size-1]=gyro[1];
+	gyro_z[data_array_size-1]=gyro[2];
 }
 /* USER CODE END 0 */
 
@@ -157,64 +200,6 @@ void push_data_into_gyro_record(){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	//Tone 1
-	//C6 1046.5 Hz
-	//sample n = 44.1k/1046.5 = 42
-	uint8_t C6[42];
-
-		for(int i = 0; i < 42; i++){
-			C6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/42))*256;
-		}
-
-
-	//Tone 2
-	//E6 1318.5 Hz
-	//sample n = 44.1k/1318.5 = 34
-	uint8_t E6[34];
-
-		for(int i = 0; i < 34; i++){
-			E6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/34))*256;
-		}
-
-
-	//Tone 3
-	//G6 1568.0 Hz
-	//sample n = 44.1k/1568 = 28
-	uint8_t G6[28];
-
-		for(int i = 0; i < 28; i++){
-			G6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/28))*256;
-		}
-
-
-	//Tone 4
-	//A6 1760.0 Hz
-	// sample n = 44.1k/1760 = 25
-	uint8_t A6[25];
-
-		for(int i = 0; i < 25; i++){
-			A6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/25))*256;
-		}
-
-
-	//Tone 5
-	//B6 1975.53 Hz
-	//sample n = 44.1k/1975.5 = 22
-	uint8_t B6[22];
-
-		for(int i = 0; i < 22; i++){
-			B6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/22))*256;
-		}
-
-
-	//Tone 6
-	//B5 987.78 Hz
-	//sample n = 44.1k/987.78 = 45
-	uint8_t B5[45];
-
-		for(int i = 0; i < 45; i++){
-			B5[i] =  0.33*(1 + arm_sin_f32(2*pi*i/45))*256;
-		}
 
   /* USER CODE END 1 */
 
@@ -243,18 +228,18 @@ int main(void)
   MX_TIM2_Init();
   MX_DAC1_Init();
   /* USER CODE BEGIN 2 */
+  //component init
   BSP_QSPI_Init();
   HAL_TIM_Base_Start_IT(&htim2);
-  
   BSP_HSENSOR_Init();
-  BSP_MAGNETO_Init();
   BSP_GYRO_Init();
-  BSP_PSENSOR_Init();
   BSP_TSENSOR_Init();
+  //private function init
+  init_sound_wave();
   init_gyro_record();
   
-  //Erase 3 blocks prior to write in
 
+  //Erase 3 blocks prior to write in
   if(BSP_QSPI_Erase_Block(0) != QSPI_OK){
 	  Error_Handler();
   }
@@ -266,81 +251,53 @@ int main(void)
   if(BSP_QSPI_Erase_Block(131072) != QSPI_OK){
 	  Error_Handler();
   }
-  
 
-      //After erased the blocks, we can write in the samples of tones
-      //Write in tone1 B5, start at 0
-      uint32_t tone_addr = 0x000000;
-      for(int i = 0; i < 490; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)B5, tone_addr, 45) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 45;
-      }
+	//After erased the blocks, we can write in the samples of tones
 
+  uint32_t tone_addr = 0x000000;
 
-      //Test if it is written (tone 1)
+	//Write in tone1 C6, start at 22050
+	for(int i = 0; i < 525; i++){
+	  if(BSP_QSPI_Write((uint8_t *)C6, tone_addr, 42) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 42;
+	}
+	tone_addr = 0x008133;//33075
 
-      uint8_t test_written[22050]={1};
+	//Test if it is written (tone 2)
+	uint8_t test_written[22050]={1};
+	if(BSP_QSPI_Read((uint8_t *)test_written, 0x00000000, 22050) != QSPI_OK){
+	  Error_Handler();
+	}
 
-      if(BSP_QSPI_Read((uint8_t *)test_written, 0x00000000, 22050) != QSPI_OK){
-    	  Error_Handler();
-      }
+  //Write in tone2 E6, start at 33075
+  for(int i = 0; i < 648; i++){
+	  if(BSP_QSPI_Write((uint8_t *)E6, tone_addr, 34) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 34;
+  }
+  tone_addr = 0x010266;//66150
 
-
-
-      //Write in tone2 C6, start at 22050
-      for(int i = 0; i < 525; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)C6, tone_addr, 42) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 42;
-      }
-      //Write in tone3 E6, start at 44100
-      for(int i = 0; i < 648; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)E6, tone_addr, 34) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 34;
-      }
-      tone_addr = 0x010266;
-      //Write in tone4 G6, start at 66150
-      for(int i = 0; i < 787; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)G6, tone_addr, 28) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 28;
-      }
-      tone_addr = 0x015888;
-      //Write in tone5 A6, start at 88200
-      for(int i = 0; i < 882; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)A6, tone_addr, 25) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 25;
-      }
+  //Write in tone3 G6, start at 66150
+  for(int i = 0; i < 787; i++){
+	  if(BSP_QSPI_Write((uint8_t *)G6, tone_addr, 28) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 28;
+  }
+  tone_addr = 0x015888;//99225
 
 
-      //Write in tone6 B6, start at 110250
-      for(int i = 0; i < 1002; i++){
-    	  if(BSP_QSPI_Write((uint8_t *)B6, tone_addr, 22) != QSPI_OK){
-    		  Error_Handler();
-    	  }
-    	  tone_addr += 22;
-      }
+  //Now read the data
+  if(BSP_QSPI_Read((uint8_t *)play, 0x00000000, 22050) != QSPI_OK){
+	  Error_Handler();
+  }
 
-      //Now read the data
-      if(BSP_QSPI_Read((uint8_t *)play, 0x00000000, 22050) != QSPI_OK){
-    	  Error_Handler();
-      }
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
+  HAL_GPIO_WritePin(RED_LED_GPIO_Port,RED_LED_Pin,1);
 
-      HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-
-      HAL_GPIO_WritePin(RED_LED_GPIO_Port,RED_LED_Pin,1);
-
-    	  
-    	  
-    
 
   /* USER CODE END 2 */
 
@@ -401,31 +358,6 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	  
-	  
-//	  for (int i = 0; i < 100; i++){
-//	  		  buffer[i] = '\0';
-//	  	  }
-//	  	  if(count % 4 == 0){
-//	  		  humidity = BSP_HSENSOR_ReadHumidity();
-//	  		  sprintf(buffer, "Humidity is %d \r\n", (int) humidity);
-//	  	  }
-//	  	  else if (count % 4 == 1){
-//	  		  BSP_MAGNETO_GetXYZ(magne);
-//	  		  sprintf(buffer, "Magnetic: %d, %d, %d \r\n", (int) magne[0], (int) magne[1], (int) magne[2]);
-//	  	  }
-//	  	  else if (count % 4 == 2){
-//	  		  BSP_GYRO_GetXYZ(gyro);
-//	  		  sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) gyro[0], (int) gyro[1], (int) gyro[2]);
-//	  	  }
-//	  	  else{
-//	  		  pressure = BSP_PSENSOR_ReadPressure();
-//	  		  sprintf(buffer, "Pressure is %d \r\n", (int) pressure);
-//	  	  }
-//
-//	  	  HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
-//
-//	  	  HAL_Delay(100);
-//	      osDelay(100); //10Hz
   }
   /* USER CODE END 3 */
 }
@@ -797,11 +729,12 @@ static void MX_GPIO_Init(void)
 
 }
 
+/* USER CODE START 4 */
+
 /* USER CODE BEGIN 4 */
 void HAL_DAC_ConvHalfCpltCallbackCh1 (DAC_HandleTypeDef * hdac){
 	HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
 //	HAL_GPIO_TogglePin(RED_LED_GPIO_Port,RED_LED_Pin);
-//
 //	HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
 
 	if(sound_counter == 5){
@@ -868,10 +801,7 @@ void start_read_sensor(void const * argument)
   for(;;)
   {
 	osDelay(100);
-	humidity = BSP_HSENSOR_ReadHumidity();
-	BSP_MAGNETO_GetXYZ(magne);
 	BSP_GYRO_GetXYZ(gyro);
-	pressure = BSP_PSENSOR_ReadPressure();
 	temp=BSP_TSENSOR_ReadTemp();
 	push_data_into_gyro_record();
   }
@@ -914,11 +844,7 @@ void start_change_sensor(void const * argument)
   for(;;)
   {
 	osDelay(30000); //30s
-	if(mode == 3) {
-		mode=0;
-	}else{
-		mode++;
-	}
+	mode=(mode+1)%3;
   }
   /* USER CODE END start_change_sensor */
 }
@@ -941,19 +867,6 @@ void start_send_terminal(void const * argument)
 		buffer[i] = '\0';
 	}
 
-
-//	if(count % 5 == 0){
-//	    sprintf(buffer, "Humidity is %d \r\n", (int) humidity);
-//	} else if (count % 5 == 1){
-//	    sprintf(buffer, "Magnetic: %d, %d, %d \r\n", (int) magne[0], (int) magne[1], (int) magne[2]);
-//	} else if (count % 5 == 2){
-//	    sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) gyro[0], (int) gyro[1], (int) gyro[2]);
-//	} else if(count % 5 == 3){
-//	    sprintf(buffer, "Pressure is %d \r\n", (int) pressure);
-//	}else{
-//		sprintf(buffer, "Temperature is %d \r\n", (int) temp);
-//	}
-
 	if(mode==1){
 	    if(temp<38){
 	    	sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
@@ -975,7 +888,6 @@ void start_send_terminal(void const * argument)
 	}else{
 		sprintf(buffer, "Detection disabled now. \r\n");
 	}
-
 
 	HAL_Delay(200);
     HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
@@ -1020,6 +932,9 @@ void start_temp(void const * argument)
 
 	HAL_Delay(100);
     HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
+
+    //call speaker functions
+
   }
   /* USER CODE END start_temp */
 }
