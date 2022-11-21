@@ -53,10 +53,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-
-#define pi 3.1415926
-#define data_array_size 20
-
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
 DMA_HandleTypeDef hdma_dac1_ch2;
@@ -69,13 +65,14 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart1;
 
-osThreadId read_sensorHandle;
-osThreadId press_buttonHandle;
-osThreadId change_sensorHandle;
+osThreadId handle_quakeHandle;
+osThreadId handle_tempHandle;
+osThreadId handle_speakerHandle;
 osThreadId send_terminalHandle;
-osThreadId detect_tempHandle;
-osThreadId detect_gyroHandle;
 /* USER CODE BEGIN PV */
+
+#define data_array_size 20
+#define wave_size 33075
 
 char buffer[100];
 int count = 0;
@@ -86,13 +83,14 @@ float gyro_y[data_array_size];
 float gyro_z[data_array_size];
 
 //sound waves
-uint8_t C6[42];
-uint8_t E6[34];
 uint8_t G6[28];
+uint8_t E7[16];
+uint8_t A6[12];
 
 float temp;
 int flag = 0;
-int tempLevel = 0;//0 no danger, 1 warning, 2 severe, 3 danger.
+int temp_warningLevel = 0;//0 no danger, 1 warning, 2 severe, 3 danger.
+int quake_warningLevel = 0;
 int earthquake = 0;
 int mode=0;//mode 0: disable detect, mode 1: detect temp, mode 2: detect earthquake
 
@@ -107,16 +105,15 @@ static void MX_USART1_UART_Init(void);
 static void MX_OCTOSPI1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_DAC1_Init(void);
-void start_read_sensor(void const * argument);
-void start_press_button(void const * argument);
-void start_change_sensor(void const * argument);
-void start_send_terminal(void const * argument);
-void start_temp(void const * argument);
-void start_detect_gyro(void const * argument);
+void earthquakeHandler(void const * argument);
+void temperatureHandler(void const * argument);
+void speakerHandler(void const * argument);
+void sendTerminal(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
 void init_sound_wave();
+void write_sound_wave_into_mem();
 void init_gyro_record();
 void push_data_into_gyro_record();
 
@@ -125,15 +122,13 @@ void push_data_into_gyro_record();
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-uint32_t play[22050]={1};//33075
-uint8_t sound_counter=0;
-
+uint32_t play[wave_size]={1};//33075
 
 //each time the blue button is pressed, modify the counter to change the detected sensor.
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 	if (GPIO_PIN == GPIO_PIN_13) {
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
-		flag = 1;
+		mode=(mode+1)%3;
 	}
 }
 
@@ -145,25 +140,59 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
  */
 void init_sound_wave(){
 	//Tone 1
-	//C6 1046.5 Hz
-	//sample n = 44.1k/1046.5 = 42
-	for(int i = 0; i < 42; i++){
-		C6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/42))*256;
+	//G6 1567.98 Hz
+	//sample n = 44.1k/1567.98 = 28
+	for(int i = 0; i < 28; i++){
+		G6[i] =  0.33*(1 + arm_sin_f32(2*PI*i/28))*256;
 	}
 
 	//Tone 2
-	//E6 1318.5 Hz
-	//sample n = 44.1k/1318.5 = 34
-	for(int i = 0; i < 34; i++){
-		E6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/34))*256;
+	//E7 2637.02 Hz
+	//sample n = 44.1k/1318.5 = 16
+	for(int i = 0; i < 16; i++){
+		E7[i] =  0.33*(1 + arm_sin_f32(2*PI*i/16))*256;
 	}
 
 	//Tone 3
-	//G6 1568.0 Hz
-	//sample n = 44.1k/1568 = 28
-	for(int i = 0; i < 28; i++){
-		G6[i] =  0.33*(1 + arm_sin_f32(2*pi*i/28))*256;
+	//A6 3520.0 Hz
+	//sample n = 44.1k/3520 = 12
+	for(int i = 0; i < 12; i++){
+		A6[i] =  0.33*(1 + arm_sin_f32(2*PI*i/12))*256;
 	}
+}
+
+/**
+ * Write the sound waves into the flash.
+ */
+void write_sound_wave_into_mem(){
+	uint32_t tone_addr = 0x000000;
+
+	//Write in tone1 C6, start at 0
+	for(int i = 0; i < 1181; i++){
+	  if(BSP_QSPI_Write((uint8_t *)G6, tone_addr, 28) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 28;
+	}
+	tone_addr = 0x008133;//33075
+
+
+  //Write in tone2 E6, start at 33075
+  for(int i = 0; i < 2067; i++){
+	  if(BSP_QSPI_Write((uint8_t *)E7, tone_addr, 16) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 16;
+  }
+  tone_addr = 0x010266;//66150
+
+  //Write in tone3 G6, start at 66150
+  for(int i = 0; i < 2756; i++){
+	  if(BSP_QSPI_Write((uint8_t *)A6, tone_addr, 12) != QSPI_OK){
+		  Error_Handler();
+	  }
+	  tone_addr += 12;
+  }
 }
 
 /**
@@ -243,61 +272,15 @@ int main(void)
   if(BSP_QSPI_Erase_Block(0) != QSPI_OK){
 	  Error_Handler();
   }
-
   if(BSP_QSPI_Erase_Block(65536) != QSPI_OK){
 	  Error_Handler();
   }
-
   if(BSP_QSPI_Erase_Block(131072) != QSPI_OK){
 	  Error_Handler();
   }
 
-	//After erased the blocks, we can write in the samples of tones
-
-  uint32_t tone_addr = 0x000000;
-
-	//Write in tone1 C6, start at 22050
-	for(int i = 0; i < 525; i++){
-	  if(BSP_QSPI_Write((uint8_t *)C6, tone_addr, 42) != QSPI_OK){
-		  Error_Handler();
-	  }
-	  tone_addr += 42;
-	}
-	tone_addr = 0x008133;//33075
-
-	//Test if it is written (tone 2)
-	uint8_t test_written[22050]={1};
-	if(BSP_QSPI_Read((uint8_t *)test_written, 0x00000000, 22050) != QSPI_OK){
-	  Error_Handler();
-	}
-
-  //Write in tone2 E6, start at 33075
-  for(int i = 0; i < 648; i++){
-	  if(BSP_QSPI_Write((uint8_t *)E6, tone_addr, 34) != QSPI_OK){
-		  Error_Handler();
-	  }
-	  tone_addr += 34;
-  }
-  tone_addr = 0x010266;//66150
-
-  //Write in tone3 G6, start at 66150
-  for(int i = 0; i < 787; i++){
-	  if(BSP_QSPI_Write((uint8_t *)G6, tone_addr, 28) != QSPI_OK){
-		  Error_Handler();
-	  }
-	  tone_addr += 28;
-  }
-  tone_addr = 0x015888;//99225
-
-
-  //Now read the data
-  if(BSP_QSPI_Read((uint8_t *)play, 0x00000000, 22050) != QSPI_OK){
-	  Error_Handler();
-  }
-
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-  HAL_GPIO_WritePin(RED_LED_GPIO_Port,RED_LED_Pin,1);
-
+  //After erased the blocks, we can write in the samples of tones
+  write_sound_wave_into_mem();
 
   /* USER CODE END 2 */
 
@@ -318,29 +301,21 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* definition and creation of read_sensor */
-  osThreadDef(read_sensor, start_read_sensor, osPriorityNormal, 0, 128);
-  read_sensorHandle = osThreadCreate(osThread(read_sensor), NULL);
+  /* definition and creation of handle_quake */
+  osThreadDef(handle_quake, earthquakeHandler, osPriorityHigh, 0, 128);
+  handle_quakeHandle = osThreadCreate(osThread(handle_quake), NULL);
 
-  /* definition and creation of press_button */
-  osThreadDef(press_button, start_press_button, osPriorityNormal, 0, 128);
-  press_buttonHandle = osThreadCreate(osThread(press_button), NULL);
+  /* definition and creation of handle_temp */
+  osThreadDef(handle_temp, temperatureHandler, osPriorityAboveNormal, 0, 128);
+  handle_tempHandle = osThreadCreate(osThread(handle_temp), NULL);
 
-  /* definition and creation of change_sensor */
-  osThreadDef(change_sensor, start_change_sensor, osPriorityNormal, 0, 128);
-  change_sensorHandle = osThreadCreate(osThread(change_sensor), NULL);
+  /* definition and creation of handle_speaker */
+  osThreadDef(handle_speaker, speakerHandler, osPriorityNormal, 0, 128);
+  handle_speakerHandle = osThreadCreate(osThread(handle_speaker), NULL);
 
   /* definition and creation of send_terminal */
-  osThreadDef(send_terminal, start_send_terminal, osPriorityNormal, 0, 128);
+  osThreadDef(send_terminal, sendTerminal, osPriorityNormal, 0, 128);
   send_terminalHandle = osThreadCreate(osThread(send_terminal), NULL);
-
-  /* definition and creation of detect_temp */
-  osThreadDef(detect_temp, start_temp, osPriorityRealtime, 0, 128);
-  detect_tempHandle = osThreadCreate(osThread(detect_temp), NULL);
-
-  /* definition and creation of detect_gyro */
-  osThreadDef(detect_gyro, start_detect_gyro, osPriorityRealtime, 0, 128);
-  detect_gyroHandle = osThreadCreate(osThread(detect_gyro), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -729,232 +704,194 @@ static void MX_GPIO_Init(void)
 
 }
 
-/* USER CODE START 4 */
-
 /* USER CODE BEGIN 4 */
 void HAL_DAC_ConvHalfCpltCallbackCh1 (DAC_HandleTypeDef * hdac){
-	HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
+//	HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
 //	HAL_GPIO_TogglePin(RED_LED_GPIO_Port,RED_LED_Pin);
 //	HAL_GPIO_TogglePin(BLUE_LED_GPIO_Port, BLUE_LED_Pin);
 
-	if(sound_counter == 5){
-		sound_counter = 0;
-	}else{
-		sound_counter++;
-	}
+//	sound_counter = (sound_counter+1) %3;
 
 }
 
 void HAL_DAC_ConvCpltCallbackCh1 (DAC_HandleTypeDef * hdac){
-	HAL_GPIO_TogglePin(GREEN_LED_GPIO_Port, GREEN_LED_Pin);
-	if(sound_counter == 0){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x000000, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
-	if(sound_counter == 1){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x005622, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
-	if(sound_counter == 2){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x00AC44, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
-	if(sound_counter == 3){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x010266, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
-	if(sound_counter == 4){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x015888, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
-	if(sound_counter == 5){
-		if(BSP_QSPI_Read((uint8_t *)play, 0x01AEAA, 22050) != QSPI_OK){
-			  Error_Handler();
-		  }
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, 22050, DAC_ALIGN_8B_R);
-	}
+
+//	switch(counter){
+//	    case 0  :
+//			if(BSP_QSPI_Read((uint8_t *)play, 0x000000, size) != QSPI_OK) Error_Handler();
+//			HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, size, DAC_ALIGN_8B_R);
+//	       break;
+//	    case 1  :
+//	    	if(BSP_QSPI_Read((uint8_t *)play, 0x008133, size) != QSPI_OK) Error_Handler();
+//	    	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, size, DAC_ALIGN_8B_R);
+//	       break;
+//	    case 2  :
+//	    	if(BSP_QSPI_Read((uint8_t *)play, 0x010266, size) != QSPI_OK) Error_Handler();
+//	    	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, size, DAC_ALIGN_8B_R);
+//	       break;
+//	}
 }
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_start_read_sensor */
+/* USER CODE BEGIN Header_earthquakeHandler */
 /**
-  * @brief  Function implementing the read_sensor thread.
+  * @brief  Function implementing the handle_quake thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_start_read_sensor */
-void start_read_sensor(void const * argument)
+/* USER CODE END Header_earthquakeHandler */
+void earthquakeHandler(void const * argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  for(;;)
-  {
-	osDelay(100);
-	BSP_GYRO_GetXYZ(gyro);
-	temp=BSP_TSENSOR_ReadTemp();
-	push_data_into_gyro_record();
-  }
-  /* USER CODE END 5 */
-}
 
-/* USER CODE BEGIN Header_start_press_button */
-/**
-* @brief Function implementing the press_button thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_start_press_button */
-void start_press_button(void const * argument)
-{
-  /* USER CODE BEGIN start_press_button */
-  /* Infinite loop */
-  for(;;)
-  {
-	osDelay(100);
-	if (flag == 1){
-		flag = 0;
-		mode=(mode+1)%3;
-	}
-  }
-  /* USER CODE END start_press_button */
-}
+	for(;;)
+	{
+		osDelay(100);
+		BSP_GYRO_GetXYZ(gyro);
+		push_data_into_gyro_record();
 
-/* USER CODE BEGIN Header_start_change_sensor */
-/**
-* @brief Function implementing the change_sensor thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_start_change_sensor */
-void start_change_sensor(void const * argument)
-{
-  /* USER CODE BEGIN start_change_sensor */
-  /* Infinite loop */
-  for(;;)
-  {
-	osDelay(30000); //30s
-	mode=(mode+1)%3;
-  }
-  /* USER CODE END start_change_sensor */
-}
-
-/* USER CODE BEGIN Header_start_send_terminal */
-/**
-* @brief Function implementing the send_terminal thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_start_send_terminal */
-void start_send_terminal(void const * argument)
-{
-  /* USER CODE BEGIN start_send_terminal */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(100);
-	for (int i = 0; i < 100; i++){
-		buffer[i] = '\0';
-	}
-
-	if(mode==1){
-	    if(temp<38){
-	    	sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
-	    }else if(temp>=38&&temp<40){
-	    	sprintf(buffer, "Warning, temperature is %d !!\r\n", (int) temp);
-	    }else if(temp>=40&&temp<45){
-	    	sprintf(buffer, "Danger, temperature is %d !!!!!!\r\n", (int) temp);
-	    }else{
-	    	sprintf(buffer, "Extremely danger, temperature is %d !!!!!!!!!!!!!Please leave the house!!!!!!!!!!\r\n", (int) temp);
-	    }
-	}else if(mode==2){
 		float std_x=0;
 		float std_y=0;
 		float std_z=0;
 		arm_std_f32(&gyro_x,10,&std_x);
 		arm_std_f32(&gyro_y,10,&std_y);
 		arm_std_f32(&gyro_z,10,&std_z);
-		sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) std_x, (int) std_y, (int) std_z);
-	}else{
-		sprintf(buffer, "Detection disabled now. \r\n");
+		float shake = std_x + std_y + std_z;
+		if(shake < 50000){
+			quake_warningLevel=0;
+		}else if(shake > 50000 && shake < 100000){
+			quake_warningLevel=1;
+		}else if(shake > 100000 && shake < 150000){
+			quake_warningLevel=2;
+		}else{
+			quake_warningLevel=3;
+		}
 	}
 
-	HAL_Delay(200);
-    HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
-  }
-  /* USER CODE END start_send_terminal */
+  /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_start_temp */
+/* USER CODE BEGIN Header_temperatureHandler */
 /**
-* @brief Function implementing the detect_temp thread.
+* @brief Function implementing the handle_temp thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_start_temp */
-void start_temp(void const * argument)
+/* USER CODE END Header_temperatureHandler */
+void temperatureHandler(void const * argument)
 {
-  /* USER CODE BEGIN start_temp */
+  /* USER CODE BEGIN temperatureHandler */
   /* Infinite loop */
   for(;;)
   {
-    osDelay(100);
-    if(temp<38){
-    	tempLevel=0;
-    }else if(temp>=38&&temp<40){
-    	tempLevel=1;
-    }else if(temp>=40&&temp<45){
-    	tempLevel=2;
-    }else{
-    	tempLevel=3;
-    }
+	  osDelay(100);
+	  temp=BSP_TSENSOR_ReadTemp();
 
-//    if(tempLevel==0){
-//    	sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
-//    }else if(tempLevel==1){
-//    	sprintf(buffer, "Warning, temperature is %d !!\r\n", (int) temp);
-//    }else if(tempLevel==2){
-//    	sprintf(buffer, "Danger, temperature is %d !!!!!!\r\n", (int) temp);
-//    }else{
-//    	sprintf(buffer, "Extremely danger, temperature is %d !!!!!!!!!!!!!Please leave the house!!!!!!!!!!\r\n", (int) temp);
-//    }
-
-
-	HAL_Delay(100);
-    HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
-
-    //call speaker functions
+	  if(temp<38){
+		  temp_warningLevel=0;
+	  }else if(temp>=38&&temp<40){
+		  temp_warningLevel=1;
+	  }else if(temp>=40&&temp<45){
+		  temp_warningLevel=2;
+	  }else{
+		  temp_warningLevel=3;
+	  }
 
   }
-  /* USER CODE END start_temp */
+  /* USER CODE END temperatureHandler */
 }
 
-/* USER CODE BEGIN Header_start_detect_gyro */
+/* USER CODE BEGIN Header_speakerHandler */
 /**
-* @brief Function implementing the detect_gyro thread.
+* @brief Function implementing the handle_speaker thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_start_detect_gyro */
-void start_detect_gyro(void const * argument)
+/* USER CODE END Header_speakerHandler */
+void speakerHandler(void const * argument)
 {
-  /* USER CODE BEGIN start_detect_gyro */
+  /* USER CODE BEGIN speakerHandler */
   /* Infinite loop */
   for(;;)
   {
-    osDelay(100);
+	osDelay(100);
+	int warningLevel = (temp_warningLevel > quake_warningLevel) ? temp_warningLevel : quake_warningLevel;
+
+  	for (int i = 0; i < 100; i++){
+  		buffer[i] = '\0';
+  	}
+	sprintf(buffer, "Warning level is %d \r\n", (int) warningLevel);
+	HAL_Delay(120);
+	HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
+
+	if(warningLevel != 0){
+		switch(warningLevel){
+			case 1  :
+				if(BSP_QSPI_Read((uint8_t *)play, 0x000000, wave_size) != QSPI_OK) Error_Handler();
+				HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, wave_size, DAC_ALIGN_8B_R);
+			   break;
+			case 2  :
+				if(BSP_QSPI_Read((uint8_t *)play, 0x008133, wave_size) != QSPI_OK) Error_Handler();
+				HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, wave_size, DAC_ALIGN_8B_R);
+			   break;
+			case 3  :
+				if(BSP_QSPI_Read((uint8_t *)play, 0x010266, wave_size) != QSPI_OK) Error_Handler();
+				HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, play, wave_size, DAC_ALIGN_8B_R);
+			   break;
+		}
+		HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
+	}
   }
-  /* USER CODE END start_detect_gyro */
+  /* USER CODE END speakerHandler */
+}
+
+/* USER CODE BEGIN Header_sendTerminal */
+/**
+* @brief Function implementing the send_terminal thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_sendTerminal */
+void sendTerminal(void const * argument)
+{
+  /* USER CODE BEGIN sendTerminal */
+  /* Infinite loop */
+  for(;;)
+  {
+	  osDelay(100);
+
+	  	for (int i = 0; i < 100; i++){
+	  		buffer[i] = '\0';
+	  	}
+
+	  	if(mode==1){
+	  		if(temp<38){
+	  			sprintf(buffer, "OK, temperature is %d \r\n", (int) temp);
+	  		}else if(temp>=38&&temp<40){
+	  			sprintf(buffer, "Warning, temperature is %d !!\r\n", (int) temp);
+	  		}else if(temp>=40&&temp<45){
+	  			sprintf(buffer, "Danger, temperature is %d !!!!!!\r\n", (int) temp);
+	  		}else{
+	  			sprintf(buffer, "Extremely danger, temperature is %d !!!!!!!!!!!!!Please leave the house!!!!!!!!!!\r\n", (int) temp);
+	  		}
+	  	}else if(mode==2){
+	  		float std_x=0;
+	  		float std_y=0;
+	  		float std_z=0;
+	  		arm_std_f32(&gyro_x,10,&std_x);
+	  		arm_std_f32(&gyro_y,10,&std_y);
+	  		arm_std_f32(&gyro_z,10,&std_z);
+	  		sprintf(buffer, "Gyro: %d, %d, %d \r\n", (int) std_x, (int) std_y, (int) std_z);
+	  	}else{
+	  		sprintf(buffer, "Detection disabled now. \r\n");
+	  	}
+
+	  	HAL_Delay(100);
+	      HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
+  }
+  /* USER CODE END sendTerminal */
 }
 
 /**
