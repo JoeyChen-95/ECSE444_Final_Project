@@ -43,6 +43,6 @@
 ../Src/main.c:744:6:earthquakeHandler	32	static
 ../Src/main.c:783:6:temperatureHandler	16	static
 ../Src/main.c:813:6:speakerHandler	32	static
-../Src/main.c:857:6:sendTerminal	40	static
-../Src/main.c:905:6:HAL_TIM_PeriodElapsedCallback	16	static
-../Src/main.c:922:6:Error_Handler	4	static,ignoring_inline_asm
+../Src/main.c:853:6:sendTerminal	40	static
+../Src/main.c:901:6:HAL_TIM_PeriodElapsedCallback	16	static
+../Src/main.c:918:6:Error_Handler	4	static,ignoring_inline_asm

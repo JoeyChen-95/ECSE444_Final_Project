@@ -759,11 +759,11 @@ void earthquakeHandler(void const * argument)
 		arm_std_f32(&gyro_y,10,&std_y);
 		arm_std_f32(&gyro_z,10,&std_z);
 		float shake = std_x + std_y + std_z;
-		if(shake < 50000){
+		if(shake < 30000){
 			quake_warningLevel=0;
-		}else if(shake > 50000 && shake < 100000){
+		}else if(shake > 30000 && shake < 70000){
 			quake_warningLevel=1;
-		}else if(shake > 100000 && shake < 150000){
+		}else if(shake > 70000 && shake < 100000){
 			quake_warningLevel=2;
 		}else{
 			quake_warningLevel=3;
@@ -819,13 +819,6 @@ void speakerHandler(void const * argument)
 	osDelay(100);
 	int warningLevel = (temp_warningLevel > quake_warningLevel) ? temp_warningLevel : quake_warningLevel;
 
-  	for (int i = 0; i < 100; i++){
-  		buffer[i] = '\0';
-  	}
-	sprintf(buffer, "Warning level is %d \r\n", (int) warningLevel);
-	HAL_Delay(120);
-	HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
-
 	if(warningLevel != 0){
 		switch(warningLevel){
 			case 1  :
@@ -842,6 +835,9 @@ void speakerHandler(void const * argument)
 			   break;
 		}
 		HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_SET);
+	}else{
+		HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
+		HAL_DAC_Stop_DMA (&hdac1, DAC_CHANNEL_1);
 	}
   }
   /* USER CODE END speakerHandler */
