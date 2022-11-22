@@ -27121,7 +27121,7 @@ void earthquakeHandler(void const * argument)
  8009edc:	edd7 7a02 	vldr	s15, [r7, #8]
  8009ee0:	ee77 7a27 	vadd.f32	s15, s14, s15
  8009ee4:	edc7 7a05 	vstr	s15, [r7, #20]
-		if(shake < 50000){
+		if(shake < 30000){
  8009ee8:	edd7 7a05 	vldr	s15, [r7, #20]
  8009eec:	ed9f 7a21 	vldr	s14, [pc, #132]	; 8009f74 <earthquakeHandler+0xf8>
  8009ef0:	eef4 7ac7 	vcmpe.f32	s15, s14
@@ -27132,7 +27132,7 @@ void earthquakeHandler(void const * argument)
  8009efc:	2200      	movs	r2, #0
  8009efe:	601a      	str	r2, [r3, #0]
  8009f00:	e7c0      	b.n	8009e84 <earthquakeHandler+0x8>
-		}else if(shake > 50000 && shake < 100000){
+		}else if(shake > 30000 && shake < 45000){
  8009f02:	edd7 7a05 	vldr	s15, [r7, #20]
  8009f06:	ed9f 7a1b 	vldr	s14, [pc, #108]	; 8009f74 <earthquakeHandler+0xf8>
  8009f0a:	eef4 7ac7 	vcmpe.f32	s15, s14
@@ -27148,7 +27148,7 @@ void earthquakeHandler(void const * argument)
  8009f28:	2201      	movs	r2, #1
  8009f2a:	601a      	str	r2, [r3, #0]
  8009f2c:	e018      	b.n	8009f60 <earthquakeHandler+0xe4>
-		}else if(shake > 100000 && shake < 150000){
+		}else if(shake > 45000 && shake < 100000){
  8009f2e:	edd7 7a05 	vldr	s15, [r7, #20]
  8009f32:	ed9f 7a12 	vldr	s14, [pc, #72]	; 8009f7c <earthquakeHandler+0x100>
  8009f36:	eef4 7ac7 	vcmpe.f32	s15, s14
@@ -27176,10 +27176,10 @@ void earthquakeHandler(void const * argument)
  8009f68:	200217e4 	.word	0x200217e4
  8009f6c:	20021834 	.word	0x20021834
  8009f70:	20021884 	.word	0x20021884
- 8009f74:	47435000 	.word	0x47435000
+ 8009f74:	46ea6000 	.word	0x46ea6000
  8009f78:	20021914 	.word	0x20021914
- 8009f7c:	47c35000 	.word	0x47c35000
- 8009f80:	48127c00 	.word	0x48127c00
+ 8009f7c:	472fc800 	.word	0x472fc800
+ 8009f80:	47c35000 	.word	0x47c35000
 
 08009f84 <temperatureHandler>:
 * @param argument: Not used
@@ -27205,7 +27205,7 @@ void temperatureHandler(void const * argument)
  8009f9a:	4b22      	ldr	r3, [pc, #136]	; (800a024 <temperatureHandler+0xa0>)
  8009f9c:	edc3 7a00 	vstr	s15, [r3]
 
-	  if(temp<38){
+	  if(temp<35){
  8009fa0:	4b20      	ldr	r3, [pc, #128]	; (800a024 <temperatureHandler+0xa0>)
  8009fa2:	edd3 7a00 	vldr	s15, [r3]
  8009fa6:	ed9f 7a20 	vldr	s14, [pc, #128]	; 800a028 <temperatureHandler+0xa4>
@@ -27217,7 +27217,7 @@ void temperatureHandler(void const * argument)
  8009fb6:	2200      	movs	r2, #0
  8009fb8:	601a      	str	r2, [r3, #0]
  8009fba:	e7e7      	b.n	8009f8c <temperatureHandler+0x8>
-	  }else if(temp>=38&&temp<40){
+	  }else if(temp>=35&&temp<37){
  8009fbc:	4b19      	ldr	r3, [pc, #100]	; (800a024 <temperatureHandler+0xa0>)
  8009fbe:	edd3 7a00 	vldr	s15, [r3]
  8009fc2:	ed9f 7a19 	vldr	s14, [pc, #100]	; 800a028 <temperatureHandler+0xa4>
@@ -27235,7 +27235,7 @@ void temperatureHandler(void const * argument)
  8009fe6:	2201      	movs	r2, #1
  8009fe8:	601a      	str	r2, [r3, #0]
  8009fea:	e01a      	b.n	800a022 <temperatureHandler+0x9e>
-	  }else if(temp>=40&&temp<45){
+	  }else if(temp>=37&&temp<42){
  8009fec:	4b0d      	ldr	r3, [pc, #52]	; (800a024 <temperatureHandler+0xa0>)
  8009fee:	edd3 7a00 	vldr	s15, [r3]
  8009ff2:	ed9f 7a0f 	vldr	s14, [pc, #60]	; 800a030 <temperatureHandler+0xac>
@@ -27261,10 +27261,10 @@ void temperatureHandler(void const * argument)
 	  osDelay(100);
  800a022:	e7b3      	b.n	8009f8c <temperatureHandler+0x8>
  800a024:	2002190c 	.word	0x2002190c
- 800a028:	42180000 	.word	0x42180000
+ 800a028:	420c0000 	.word	0x420c0000
  800a02c:	20021910 	.word	0x20021910
- 800a030:	42200000 	.word	0x42200000
- 800a034:	42340000 	.word	0x42340000
+ 800a030:	42140000 	.word	0x42140000
+ 800a034:	42280000 	.word	0x42280000
 
 0800a038 <speakerHandler>:
 * @param argument: Not used

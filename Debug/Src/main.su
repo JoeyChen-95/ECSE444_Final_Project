@@ -41,8 +41,8 @@
 ../Src/main.c:708:6:HAL_DAC_ConvHalfCpltCallbackCh1	16	static
 ../Src/main.c:717:6:HAL_DAC_ConvCpltCallbackCh1	16	static
 ../Src/main.c:744:6:earthquakeHandler	32	static
-../Src/main.c:783:6:temperatureHandler	16	static
-../Src/main.c:813:6:speakerHandler	32	static
-../Src/main.c:853:6:sendTerminal	40	static
-../Src/main.c:901:6:HAL_TIM_PeriodElapsedCallback	16	static
-../Src/main.c:918:6:Error_Handler	4	static,ignoring_inline_asm
+../Src/main.c:784:6:temperatureHandler	16	static
+../Src/main.c:814:6:speakerHandler	32	static
+../Src/main.c:854:6:sendTerminal	40	static
+../Src/main.c:902:6:HAL_TIM_PeriodElapsedCallback	16	static
+../Src/main.c:919:6:Error_Handler	4	static,ignoring_inline_asm

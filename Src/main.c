@@ -761,13 +761,15 @@ void earthquakeHandler(void const * argument)
 		float shake = std_x + std_y + std_z;
 		if(shake < 30000){
 			quake_warningLevel=0;
-		}else if(shake > 30000 && shake < 70000){
+		}else if(shake > 30000 && shake < 45000){
 			quake_warningLevel=1;
-		}else if(shake > 70000 && shake < 100000){
+		}else if(shake > 45000 && shake < 70000){
 			quake_warningLevel=2;
 		}else{
 			quake_warningLevel=3;
 		}
+
+		//invoke the speaker and send to terminal
 	}
 
   /* USER CODE END 5 */
@@ -789,15 +791,17 @@ void temperatureHandler(void const * argument)
 	  osDelay(100);
 	  temp=BSP_TSENSOR_ReadTemp();
 
-	  if(temp<38){
+	  if(temp<35){
 		  temp_warningLevel=0;
-	  }else if(temp>=38&&temp<40){
+	  }else if(temp>=35&&temp<37){
 		  temp_warningLevel=1;
-	  }else if(temp>=40&&temp<45){
+	  }else if(temp>=37&&temp<42){
 		  temp_warningLevel=2;
 	  }else{
 		  temp_warningLevel=3;
 	  }
+
+	  //invoke the speaker and send to terminal
 
   }
   /* USER CODE END temperatureHandler */
