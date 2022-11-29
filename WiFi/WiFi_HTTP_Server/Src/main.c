@@ -157,11 +157,6 @@ void sin3_generate(){
 		}
 }
 
-//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-//	if(htim->Instance == TIM4){
-//		WebServerProcess();
-//	}
-//}
 /**
   * @brief  Main program
   * @param  None
@@ -173,6 +168,9 @@ uint16_t *VREFINT = ((uint16_t*) ((uint32_t) 0x1FFF75AA));
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
 ADC_ChannelConfTypeDef sConfig1;
+
+
+
 int main(void)
 {
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -185,19 +183,15 @@ int main(void)
   MX_ADC1_Init();
   MX_DAC1_Init();
   MX_TIM2_Init();
-  //MX_ADC1_Init();
- // MX_TIM4_Init();
   /* Configure LED2 */
   BSP_LED_Init(LED2);
   /* USER push button is used to ask if reconfiguration is needed */
   BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
-
 	sConfig1.Channel = ADC_CHANNEL_VREFINT;
 	sConfig1.SamplingTime = ADC_SAMPLETIME_640CYCLES_5;
 	sConfig1.SingleDiff = ADC_SINGLE_ENDED;
 	sConfig1.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig1.Rank = 1;
-	//HAL_ADC_Init(&hadc1);
   /* WIFI Web Server demonstration */
 #if defined (TERMINAL_USE)
   /* Initialize all configured peripherals */
@@ -211,13 +205,9 @@ int main(void)
   hDiscoUart.Init.OverSampling = UART_OVERSAMPLING_16;
   hDiscoUart.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   hDiscoUart.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-
-
   BSP_COM_Init(COM1, &hDiscoUart);
   BSP_TSENSOR_Init();
-
   printf("\n****** WIFI Web Server demonstration ******\n\n");
-
 #endif /* TERMINAL_USE */
   HAL_TIM_Base_Start(&htim2);
   sin_generate();
@@ -228,8 +218,8 @@ int main(void)
   uint32_t i = 0;
   while (1)
   {
-  i++;
-  HAL_Delay(1000);
+	  i++;
+	  HAL_Delay(1000);
   }
 }
 
@@ -238,8 +228,6 @@ int main(void)
   * @param  None
   * @retval None
   */
-
-
 static int wifi_start(void)
 {
   uint8_t  MAC_Addr[6];
@@ -273,8 +261,7 @@ static int wifi_start(void)
 
 
 
-int wifi_connect(void)
-{
+int wifi_connect(void){
   wifi_start();
   
   memset(&user_config, 0, sizeof(user_config));
@@ -300,7 +287,6 @@ int wifi_connect(void)
     scanf("%s", &user_config.wifi_config.ssid);
     //char test_ssid[SSID_SIZE] = "BELL222-V";
 //    user_config.wifi_config.ssid = test_ssid;
-
 
     printf("\r\nWe receive the SSID : ");
     LOG(("\r\nYou have entered %s as SSID.\r\n", user_config.wifi_config.ssid));
@@ -368,6 +354,8 @@ int wifi_connect(void)
   return 0;
 }
 
+
+
 int wifi_server(void)
 {
   bool StopServer = false;
@@ -420,7 +408,6 @@ int wifi_server(void)
 static bool WebServerProcess(void)
 {
 	HAL_TIM_Base_Start(&htim2);
-//	HAL_TIM_Base_Start_IT(&htim4);
 	sin_generate();
 	sin2_generate();
 	sin3_generate();
@@ -446,18 +433,17 @@ static bool WebServerProcess(void)
       if(strstr((char *)resp, "GET")) /* GET: put web page */
       {
         temp = (int) BSP_TSENSOR_ReadTemp();
-        if (temp >32 && LedState == 0){
-			if(temp > 32 && temp < 39){
+        if (temp >35){
+			if(temp > 35 && temp < 37){
 				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
 				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin_samples,50,DAC_ALIGN_12B_R);
 				LedState = 0;
 			}
-			else if(temp > 38 && temp < 46){
+			else if(temp > 37 && temp < 42){
 				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
 				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin2_samples,40,DAC_ALIGN_12B_R);
 				LedState = 0;
-			}
-			else if(temp > 45){
+			}else{
 				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
 				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin3_samples,25,DAC_ALIGN_12B_R);
 				LedState = 0;
@@ -529,8 +515,7 @@ static bool WebServerProcess(void)
   * @param  None
   * @retval None
   */
-static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float voltage)
-{
+static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float voltage){
   uint8_t  temp[50];
   uint16_t SentDataLength;
   WIFI_Status_t ret;
@@ -539,30 +524,26 @@ static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float volt
   strcpy((char *)http, (char *)"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nPragma: no-cache\r\n\r\n");
   strcat((char *)http, (char *)"<html>\r\n<body>\r\n");
   strcat((char *)http, (char *)"<title>STM32 Web Server</title>\r\n");
-  strcat((char *)http, (char *)"<h2>ECSE 444 FINAL PROJECT - GROUP 6 </h2>\r\n");
+  strcat((char *)http, (char *)"<h2><center>ECSE 444 FINAL PROJECT - Team 16 </center></h2>\r\n");
   strcat((char *)http, (char *)"<br /><hr>\r\n");
-  strcat((char *)http, (char *)"<p><form method=\"POST\"><strong>Temp: <input type=\"text\" value=\"");
+  strcat((char *)http, (char *)"<p><form method=\"POST\"><strong>Temperature: <input type=\"text\" value=\"");
   sprintf((char *)temp, "%d", temperature);
   strcat((char *)http, (char *)temp);
-  strcat((char *)http, (char *)"\"> <sup>O</sup>C");
-  strcat((char*)http,(char*)"<p><form method=\"POST\"><strong>Voltage: <input type=\"text\" value=\"");
-  memset(temp,0,sizeof(temp));
-  sprintf((char*)temp,"%f",voltage);
-  strcat((char*)http,(char*)temp);
-  strcat((char*)http,(char*)"\"> V");
+  strcat((char *)http, (char *)"\"> <sup>O</sup>C\r\n");
+  strcat((char *)http, (char *)"<br />");
 
   if (ledIsOn)
   {
-    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" >Speaker on");
-    strcat((char *)http, (char *)"<br><input type=\"radio\" name=\"radio\" value=\"1\" checked>Speaker off");
+    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" >Speaker on\r\n");
+    strcat((char *)http, (char *)"<br>\r\n<input type=\"radio\" name=\"radio\" value=\"1\" checked>Speaker off");
   }
   else
   {
-    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" checked>Speaker on");
-    strcat((char *)http, (char *)"<br><input type=\"radio\" name=\"radio\" value=\"1\" >Speaker off");
+    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" checked>Speaker on\r\n");
+    strcat((char *)http, (char *)"<br>\r\n<input type=\"radio\" name=\"radio\" value=\"1\" >Speaker off\r\n");
   }
 
-  strcat((char *)http, (char *)"</strong><p><input type=\"submit\"></form></span>");
+  strcat((char *)http, (char *)"</strong><p><input type=\"submit\">submit<\input></form></span>\r\n");
   strcat((char *)http, (char *)"</body>\r\n</html>\r\n");
 
   ret = WIFI_SendData(0, (uint8_t *)http, strlen((char *)http), &SentDataLength, WIFI_WRITE_TIMEOUT);
@@ -571,7 +552,6 @@ static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float volt
   {
     ret = WIFI_STATUS_ERROR;
   }
-
   return ret;
 }
 
@@ -674,6 +654,9 @@ static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float volt
 //    Error_Handler();
 //  }
 //}
+
+
+
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -731,8 +714,7 @@ void Button_Reset()
 /**
   * @brief Waiting for button to be pushed
   */
-uint8_t Button_WaitForPush(uint32_t delay)
-{
+uint8_t Button_WaitForPush(uint32_t delay){
   uint32_t time_out = HAL_GetTick() + delay;
 
   do
@@ -748,18 +730,17 @@ uint8_t Button_WaitForPush(uint32_t delay)
   return 0;
 }
 
+
 #if defined (TERMINAL_USE)
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
   * @retval None
   */
-PUTCHAR_PROTOTYPE
-{
+PUTCHAR_PROTOTYPE{
   /* Place your implementation of fputc here */
   /* e.g. write a character to the USART1 and Loop until the end of transmission */
   HAL_UART_Transmit(&hDiscoUart, (uint8_t *)&ch, 1, 0xFFFF);
-
   return ch;
 }
 
