@@ -32,6 +32,8 @@
 "./Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.o"
 "./Src/freertos.o"
 "./Src/main.o"
+"./Src/normal_version.o"
+"./Src/one_thread.o"
 "./Src/stm32l4s5i_iot01.o"
 "./Src/stm32l4s5i_iot01_accelero.o"
 "./Src/stm32l4s5i_iot01_gyro.o"
