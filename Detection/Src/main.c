@@ -142,9 +142,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 
 /**
  * Initialize the warning sound wave.
- * Level1: with frequency: xxx
- * Level2: with frequency: xxx
- * Level3: with frequency: xxx
+ * Level1: with frequency: G6
+ * Level2: with frequency: E7
+ * Level3: with frequency: A6
  */
 void init_sound_wave(){
 	//Tone 1
