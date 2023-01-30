@@ -7,6 +7,8 @@
 C_SRCS += \
 ../Src/freertos.c \
 ../Src/main.c \
+../Src/normal_version.c \
+../Src/one_thread.c \
 ../Src/stm32l4s5i_iot01.c \
 ../Src/stm32l4s5i_iot01_accelero.c \
 ../Src/stm32l4s5i_iot01_gyro.c \
@@ -25,6 +27,8 @@ C_SRCS += \
 OBJS += \
 ./Src/freertos.o \
 ./Src/main.o \
+./Src/normal_version.o \
+./Src/one_thread.o \
 ./Src/stm32l4s5i_iot01.o \
 ./Src/stm32l4s5i_iot01_accelero.o \
 ./Src/stm32l4s5i_iot01_gyro.o \
@@ -43,6 +47,8 @@ OBJS += \
 C_DEPS += \
 ./Src/freertos.d \
 ./Src/main.d \
+./Src/normal_version.d \
+./Src/one_thread.d \
 ./Src/stm32l4s5i_iot01.d \
 ./Src/stm32l4s5i_iot01_accelero.d \
 ./Src/stm32l4s5i_iot01_gyro.d \
@@ -61,12 +67,12 @@ C_DEPS += \
 
 # Each subdirectory must supply rules for building sources it contributes
 Src/%.o Src/%.su: ../Src/%.c Src/subdir.mk
-	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32L4S5xx -c -I../Inc -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Inc" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Components" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Components/lsm6dsl" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Components/hts221" -I../Components -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Components" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Inc" -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -I../Middlewares/Third_Party/FreeRTOS/Source/include -I../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS -I../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
+	arm-none-eabi-gcc "$<" -mcpu=cortex-m4 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32L4S5xx -c -I../Inc -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Inc" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Components" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Components/lsm6dsl" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Components/hts221" -I../Components -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Components" -I"D:/Mcgill/2022Fall/ECSE-444/lab/ECSE444_Final_Project/Detection/Inc" -I../Drivers/STM32L4xx_HAL_Driver/Inc -I../Drivers/STM32L4xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32L4xx/Include -I../Drivers/CMSIS/Include -I../Middlewares/Third_Party/FreeRTOS/Source/include -I../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS -I../Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -o "$@"
 
 clean: clean-Src
 
 clean-Src:
-	-$(RM) ./Src/freertos.d ./Src/freertos.o ./Src/freertos.su ./Src/main.d ./Src/main.o ./Src/main.su ./Src/stm32l4s5i_iot01.d ./Src/stm32l4s5i_iot01.o ./Src/stm32l4s5i_iot01.su ./Src/stm32l4s5i_iot01_accelero.d ./Src/stm32l4s5i_iot01_accelero.o ./Src/stm32l4s5i_iot01_accelero.su ./Src/stm32l4s5i_iot01_gyro.d ./Src/stm32l4s5i_iot01_gyro.o ./Src/stm32l4s5i_iot01_gyro.su ./Src/stm32l4s5i_iot01_hsensor.d ./Src/stm32l4s5i_iot01_hsensor.o ./Src/stm32l4s5i_iot01_hsensor.su ./Src/stm32l4s5i_iot01_magneto.d ./Src/stm32l4s5i_iot01_magneto.o ./Src/stm32l4s5i_iot01_magneto.su ./Src/stm32l4s5i_iot01_psensor.d ./Src/stm32l4s5i_iot01_psensor.o ./Src/stm32l4s5i_iot01_psensor.su ./Src/stm32l4s5i_iot01_qspi.d ./Src/stm32l4s5i_iot01_qspi.o ./Src/stm32l4s5i_iot01_qspi.su ./Src/stm32l4s5i_iot01_tsensor.d ./Src/stm32l4s5i_iot01_tsensor.o ./Src/stm32l4s5i_iot01_tsensor.su ./Src/stm32l4xx_hal_msp.d ./Src/stm32l4xx_hal_msp.o ./Src/stm32l4xx_hal_msp.su ./Src/stm32l4xx_hal_timebase_tim.d ./Src/stm32l4xx_hal_timebase_tim.o ./Src/stm32l4xx_hal_timebase_tim.su ./Src/stm32l4xx_it.d ./Src/stm32l4xx_it.o ./Src/stm32l4xx_it.su ./Src/syscalls.d ./Src/syscalls.o ./Src/syscalls.su ./Src/sysmem.d ./Src/sysmem.o ./Src/sysmem.su ./Src/system_stm32l4xx.d ./Src/system_stm32l4xx.o ./Src/system_stm32l4xx.su
+	-$(RM) ./Src/freertos.d ./Src/freertos.o ./Src/freertos.su ./Src/main.d ./Src/main.o ./Src/main.su ./Src/normal_version.d ./Src/normal_version.o ./Src/normal_version.su ./Src/one_thread.d ./Src/one_thread.o ./Src/one_thread.su ./Src/stm32l4s5i_iot01.d ./Src/stm32l4s5i_iot01.o ./Src/stm32l4s5i_iot01.su ./Src/stm32l4s5i_iot01_accelero.d ./Src/stm32l4s5i_iot01_accelero.o ./Src/stm32l4s5i_iot01_accelero.su ./Src/stm32l4s5i_iot01_gyro.d ./Src/stm32l4s5i_iot01_gyro.o ./Src/stm32l4s5i_iot01_gyro.su ./Src/stm32l4s5i_iot01_hsensor.d ./Src/stm32l4s5i_iot01_hsensor.o ./Src/stm32l4s5i_iot01_hsensor.su ./Src/stm32l4s5i_iot01_magneto.d ./Src/stm32l4s5i_iot01_magneto.o ./Src/stm32l4s5i_iot01_magneto.su ./Src/stm32l4s5i_iot01_psensor.d ./Src/stm32l4s5i_iot01_psensor.o ./Src/stm32l4s5i_iot01_psensor.su ./Src/stm32l4s5i_iot01_qspi.d ./Src/stm32l4s5i_iot01_qspi.o ./Src/stm32l4s5i_iot01_qspi.su ./Src/stm32l4s5i_iot01_tsensor.d ./Src/stm32l4s5i_iot01_tsensor.o ./Src/stm32l4s5i_iot01_tsensor.su ./Src/stm32l4xx_hal_msp.d ./Src/stm32l4xx_hal_msp.o ./Src/stm32l4xx_hal_msp.su ./Src/stm32l4xx_hal_timebase_tim.d ./Src/stm32l4xx_hal_timebase_tim.o ./Src/stm32l4xx_hal_timebase_tim.su ./Src/stm32l4xx_it.d ./Src/stm32l4xx_it.o ./Src/stm32l4xx_it.su ./Src/syscalls.d ./Src/syscalls.o ./Src/syscalls.su ./Src/sysmem.d ./Src/sysmem.o ./Src/sysmem.su ./Src/system_stm32l4xx.d ./Src/system_stm32l4xx.o ./Src/system_stm32l4xx.su
 
 .PHONY: clean-Src
 

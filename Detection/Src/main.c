@@ -69,6 +69,10 @@ osThreadId handle_quakeHandle;
 osThreadId handle_tempHandle;
 osThreadId handle_speakerHandle;
 osThreadId send_terminalHandle;
+osSemaphoreId tempLockHandle;
+osSemaphoreId gyroLockHandle;
+osSemaphoreId tempTerminalLockHandle;
+osSemaphoreId gyroTerminalLockHandle;
 /* USER CODE BEGIN PV */
 
 #define data_array_size 20
@@ -81,6 +85,10 @@ float gyro[3];
 float gyro_x[data_array_size];
 float gyro_y[data_array_size];
 float gyro_z[data_array_size];
+
+int timeCounter = 0;
+int timeCycle = 30;
+int timeTaken = 0;
 
 //sound waves
 uint8_t G6[28];
@@ -134,9 +142,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_PIN) {
 
 /**
  * Initialize the warning sound wave.
- * Level1: with frequency: xxx
- * Level2: with frequency: xxx
- * Level3: with frequency: xxx
+ * Level1: with frequency: G6
+ * Level2: with frequency: E7
+ * Level3: with frequency: A6
  */
 void init_sound_wave(){
 	//Tone 1
@@ -266,7 +274,7 @@ int main(void)
   //private function init
   init_sound_wave();
   init_gyro_record();
-  
+
 
   //Erase 3 blocks prior to write in
   if(BSP_QSPI_Erase_Block(0) != QSPI_OK){
@@ -287,6 +295,23 @@ int main(void)
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
+
+  /* Create the semaphores(s) */
+  /* definition and creation of tempLock */
+  osSemaphoreDef(tempLock);
+  tempLockHandle = osSemaphoreCreate(osSemaphore(tempLock), 1);
+
+  /* definition and creation of gyroLock */
+  osSemaphoreDef(gyroLock);
+  gyroLockHandle = osSemaphoreCreate(osSemaphore(gyroLock), 1);
+
+  /* definition and creation of tempTerminalLock */
+  osSemaphoreDef(tempTerminalLock);
+  tempTerminalLockHandle = osSemaphoreCreate(osSemaphore(tempTerminalLock), 1);
+
+  /* definition and creation of gyroTerminalLock */
+  osSemaphoreDef(gyroTerminalLock);
+  gyroTerminalLockHandle = osSemaphoreCreate(osSemaphore(gyroTerminalLock), 1);
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
@@ -327,12 +352,13 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  HAL_TIM_Base_Start_IT(&htim2);
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  
+
   }
   /* USER CODE END 3 */
 }
@@ -555,7 +581,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1814;
+  htim2.Init.Period = 8000;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -748,7 +774,7 @@ void earthquakeHandler(void const * argument)
 
 	for(;;)
 	{
-		osDelay(100);
+		osDelay(50);
 		BSP_GYRO_GetXYZ(gyro);
 		push_data_into_gyro_record();
 
@@ -761,15 +787,17 @@ void earthquakeHandler(void const * argument)
 		float shake = std_x + std_y + std_z;
 		if(shake < 30000){
 			quake_warningLevel=0;
-		}else if(shake > 30000 && shake < 45000){
-			quake_warningLevel=1;
-		}else if(shake > 45000 && shake < 70000){
-			quake_warningLevel=2;
-		}else{
-			quake_warningLevel=3;
+		}else {
+			if(shake > 30000 && shake < 45000){
+				quake_warningLevel=1;
+			}else if(shake > 45000 && shake < 70000){
+				quake_warningLevel=2;
+			}else{
+				quake_warningLevel=3;
+			}
+			osSemaphoreRelease(gyroLockHandle);
 		}
-
-		//invoke the speaker and send to terminal
+		osSemaphoreRelease(gyroTerminalLockHandle);
 	}
 
   /* USER CODE END 5 */
@@ -788,21 +816,23 @@ void temperatureHandler(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  osDelay(100);
+	  osDelay(50);
 	  temp=BSP_TSENSOR_ReadTemp();
 
 	  if(temp<35){
 		  temp_warningLevel=0;
-	  }else if(temp>=35&&temp<37){
-		  temp_warningLevel=1;
-	  }else if(temp>=37&&temp<42){
-		  temp_warningLevel=2;
 	  }else{
-		  temp_warningLevel=3;
+		  if(temp>=35&&temp<37){
+			  temp_warningLevel=1;
+		  }else if(temp>=37&&temp<42){
+			  temp_warningLevel=2;
+		  }else{
+			  temp_warningLevel=3;
+		  }
+		  osSemaphoreRelease(tempLockHandle);
 	  }
 
-	  //invoke the speaker and send to terminal
-
+	  osSemaphoreRelease(tempTerminalLockHandle);
   }
   /* USER CODE END temperatureHandler */
 }
@@ -820,7 +850,12 @@ void speakerHandler(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	osDelay(100);
+//	  osSemaphoreWait(tempLockHandle, osWaitForever);
+	  if(osSemaphoreWait(tempLockHandle, osWaitForever)!=osOK || osSemaphoreWait(gyroLockHandle, osWaitForever)!= osOK){
+		  continue;
+	  }
+
+	osDelay(10);
 	int warningLevel = (temp_warningLevel > quake_warningLevel) ? temp_warningLevel : quake_warningLevel;
 
 	if(warningLevel != 0){
@@ -842,6 +877,8 @@ void speakerHandler(void const * argument)
 	}else{
 		HAL_GPIO_WritePin(RED_LED_GPIO_Port, RED_LED_Pin, GPIO_PIN_RESET);
 		HAL_DAC_Stop_DMA (&hdac1, DAC_CHANNEL_1);
+
+		osSemaphoreRelease(tempLockHandle);
 	}
   }
   /* USER CODE END speakerHandler */
@@ -860,7 +897,12 @@ void sendTerminal(void const * argument)
   /* Infinite loop */
   for(;;)
   {
-	  osDelay(100);
+	  if(osSemaphoreWait(tempTerminalLockHandle, 1000)!=osOK || osSemaphoreWait(gyroTerminalLockHandle, 1000)!= osOK){
+		  continue;
+	  }
+
+	  timeCounter++;
+	  osDelay(1);
 
 	  	for (int i = 0; i < 100; i++){
 	  		buffer[i] = '\0';
@@ -889,7 +931,15 @@ void sendTerminal(void const * argument)
 	  	}
 
 	  	HAL_Delay(100);
+	  	if(timeCounter==timeCycle) {
+	  		char timeString[30];
+	  		sprintf(timeString, "time taken: %d\r\n", timeTaken);
+	  		strcat(buffer, timeString);
+	  		timeCounter = 0;
+	  		timeTaken = 0;
+	  	}
 	      HAL_UART_Transmit(&huart1, (uint8_t*) buffer, sizeof(buffer), 10000);
+
   }
   /* USER CODE END sendTerminal */
 }
@@ -909,6 +959,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM6) {
     HAL_IncTick();
+  }else if (htim->Instance == TIM2){
+	  //every time 0.1ms
+	  timeTaken++;
   }
   /* USER CODE BEGIN Callback 1 */
 

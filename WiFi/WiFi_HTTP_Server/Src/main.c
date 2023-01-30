@@ -49,6 +49,8 @@
 #define PASSWORD_SIZE 100
 #define USER_CONF_MAGIC                 0x0123456789ABCDEFuLL
 
+#define data_array_size 20
+
 /* Private typedef------------------------------------------------------------*/
 
 typedef struct {
@@ -69,15 +71,23 @@ typedef struct {
 #if defined (TERMINAL_USE)
 extern UART_HandleTypeDef hDiscoUart;
 #endif /* TERMINAL_USE */
+
+
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
-int sin_samples[50];
-int sin2_samples[40];
-int sin3_samples[25];
-uint8_t temp;
-int time_p2 = 0;
+
+uint8_t G6[28];
+uint8_t E7[16];
+uint8_t A6[12];
+float temp;
+float gyro[3];
+float gyro_x[data_array_size];
+float gyro_y[data_array_size];
+float gyro_z[data_array_size];
+int safetyLevel=0;
+
 
 /* configuration storage in Flash memory */
 #if defined(__ICCARM__)
@@ -115,7 +125,7 @@ static  int     LedState = 0;
 #endif /* TERMINAL_USE */
 
 static void SystemClock_Config(void);
-static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float voltage);
+static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float std_x, float std_y, float std_z);
 static int wifi_server(void);
 static int wifi_start(void);
 static int wifi_connect(void);
@@ -128,51 +138,70 @@ static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_DMA_Init(void);
+void init_sound_wave();
 
 /* Private functions ---------------------------------------------------------*/
-void sin_generate(){
-	for(int i=0; i<50; i++){
-		sin_samples[i] = (int)(2000*(1+arm_sin_f32((2*3.1415926/50)*i)));
-		//TIM frequency is 60MHZ, counter period is 1200, so the time step for a single sample
-		//time is 0.02ms. If we take 50 sample times for one period, the period will be 1ms, frequency
-		//will be 1000HZ
+/**
+ * Initialize the warning sound wave.
+ * Level1: with frequency: G6
+ * Level2: with frequency: E7
+ * Level3: with frequency: A6
+ */
+void init_sound_wave(){
+	//Tone 1
+	//G6 1567.98 Hz
+	//sample n = 44.1k/1567.98 = 28
+	for(int i = 0; i < 28; i++){
+		G6[i] =  0.33*(1 + arm_sin_f32(2*PI*i/28))*256;
+	}
+
+	//Tone 2
+	//E7 2637.02 Hz
+	//sample n = 44.1k/1318.5 = 16
+	for(int i = 0; i < 16; i++){
+		E7[i] =  0.33*(1 + arm_sin_f32(2*PI*i/16))*256;
+	}
+
+	//Tone 3
+	//A6 3520.0 Hz
+	//sample n = 44.1k/3520 = 12
+	for(int i = 0; i < 12; i++){
+		A6[i] =  0.33*(1 + arm_sin_f32(2*PI*i/12))*256;
 	}
 }
 
-void sin2_generate(){
-	for(int i=0; i<40; i++){
-			sin2_samples[i] = (int)(2000*(1+arm_sin_f32((2*3.1415926/40)*i)));
-			//TIM frequency is 60MHZ, counter period is 1200, so the time step for a single sample
-			//time is 0.02ms. If we take 40 sample times for one period, the period will be 0.8ms, frequency
-			//will be 1250HZ
-		}
-}
-
-void sin3_generate(){
-	for(int i=0; i<25; i++){
-			sin3_samples[i] = (int)(2000*(1+arm_sin_f32((2*3.1415926/25)*i)));
-			//TIM frequency is 60MHZ, counter period is 1200, so the time step for a single sample
-			//time is 0.02ms. If we take 25 sample times for one period, the period will be 0.5ms, frequency
-			//will be 2000HZ
-		}
-}
-
-//void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
-//	if(htim->Instance == TIM4){
-//		WebServerProcess();
-//	}
-//}
 /**
-  * @brief  Main program
-  * @param  None
-  * @retval None
-  */
-uint16_t *TS_CAL1 = ((uint16_t*) ((uint32_t) 0x1FFF75A8));
-uint16_t *TS_CAL2 = ((uint16_t*) ((uint32_t) 0x1FFF75CA));
-uint16_t *VREFINT = ((uint16_t*) ((uint32_t) 0x1FFF75AA));
+ * Initialize the gyro sensor data array.
+ */
+void init_gyro_record(){
+	//BSP_GYRO_GetXYZ(gyro);
+	for(int i=0;i<data_array_size;i++){
+		gyro_x[i]=gyro[0];
+		gyro_y[i]=gyro[1];
+		gyro_z[i]=gyro[2];
+	}
+}
+
+/**
+ * Update the gyro record.
+ */
+void push_data_into_gyro_record(){
+	for(int i=0;i<data_array_size-1;i++){
+		gyro_x[i]=gyro_x[i+1];
+		gyro_y[i]=gyro_y[i+1];
+		gyro_z[i]=gyro_z[i+1];
+	}
+	gyro_x[data_array_size-1]=gyro[0];
+	gyro_y[data_array_size-1]=gyro[1];
+	gyro_z[data_array_size-1]=gyro[2];
+}
+
+
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
 ADC_ChannelConfTypeDef sConfig1;
+
+
 int main(void)
 {
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -185,19 +214,15 @@ int main(void)
   MX_ADC1_Init();
   MX_DAC1_Init();
   MX_TIM2_Init();
-  //MX_ADC1_Init();
- // MX_TIM4_Init();
   /* Configure LED2 */
   BSP_LED_Init(LED2);
   /* USER push button is used to ask if reconfiguration is needed */
   BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
-
 	sConfig1.Channel = ADC_CHANNEL_VREFINT;
 	sConfig1.SamplingTime = ADC_SAMPLETIME_640CYCLES_5;
 	sConfig1.SingleDiff = ADC_SINGLE_ENDED;
 	sConfig1.OffsetNumber = ADC_OFFSET_NONE;
 	sConfig1.Rank = 1;
-	//HAL_ADC_Init(&hadc1);
   /* WIFI Web Server demonstration */
 #if defined (TERMINAL_USE)
   /* Initialize all configured peripherals */
@@ -211,25 +236,18 @@ int main(void)
   hDiscoUart.Init.OverSampling = UART_OVERSAMPLING_16;
   hDiscoUart.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
   hDiscoUart.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-
-
   BSP_COM_Init(COM1, &hDiscoUart);
   BSP_TSENSOR_Init();
-
   printf("\n****** WIFI Web Server demonstration ******\n\n");
-
 #endif /* TERMINAL_USE */
   HAL_TIM_Base_Start(&htim2);
-  sin_generate();
-  sin2_generate();
-  sin3_generate();
+  init_sound_wave();
   HAL_DAC_Start(&hdac1,DAC_CHANNEL_1);
   wifi_server();
-  uint32_t i = 0;
   while (1)
   {
-  i++;
-  HAL_Delay(1000);
+	  //delay 1s
+	  HAL_Delay(1000);
   }
 }
 
@@ -238,8 +256,6 @@ int main(void)
   * @param  None
   * @retval None
   */
-
-
 static int wifi_start(void)
 {
   uint8_t  MAC_Addr[6];
@@ -247,7 +263,7 @@ static int wifi_start(void)
  /*Initialize and use WIFI module */
   if(WIFI_Init() ==  WIFI_STATUS_OK)
   {
-    printf("eS-WiFi Initialized.\r\n");
+    printf("eS-WiFi Initialized.\n");
     if(WIFI_GetMAC_Address(MAC_Addr) == WIFI_STATUS_OK)
     {
       LOG(("eS-WiFi module MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\r\n",
@@ -273,8 +289,7 @@ static int wifi_start(void)
 
 
 
-int wifi_connect(void)
-{
+int wifi_connect(void){
   wifi_start();
   
   memset(&user_config, 0, sizeof(user_config));
@@ -282,9 +297,9 @@ int wifi_connect(void)
   if (user_config.wifi_config_magic == USER_CONF_MAGIC)
   {
     /* WiFi configuration is already in Flash. Ask if we want to change it */
-    printf("Already configured SSID: %s security: %d\r\n",
+    printf("Already configured SSID: %s security: %d \r\n",
            user_config.wifi_config.ssid, user_config.wifi_config.security);
-    printf("Press board User button (blue) within 5 seconds if you want to change the configuration.\r\n");
+    printf("Press board User button (blue) within 5 seconds if you want to change the configuration. \r\n");
     Button_Reset();
     if (Button_WaitForPush(5000))
     {
@@ -296,11 +311,7 @@ int wifi_connect(void)
   if (user_config.wifi_config_magic != USER_CONF_MAGIC)
   {
     printf("\r\nEnter WiFi SSID : ");
-    //gets(user_config.wifi_config.ssid);
     scanf("%s", &user_config.wifi_config.ssid);
-    //char test_ssid[SSID_SIZE] = "BELL222-V";
-//    user_config.wifi_config.ssid = test_ssid;
-
 
     printf("\r\nWe receive the SSID : ");
     LOG(("\r\nYou have entered %s as SSID.\r\n", user_config.wifi_config.ssid));
@@ -318,7 +329,6 @@ int wifi_connect(void)
     if (user_config.wifi_config.security != 0)
     {
       printf("\r\nEnter WiFi password : ");
-      //gets(user_config.wifi_config.password);
       scanf("%s", &user_config.wifi_config.password);
     }
     user_config.wifi_config_magic = USER_CONF_MAGIC;
@@ -368,11 +378,13 @@ int wifi_connect(void)
   return 0;
 }
 
+
+
 int wifi_server(void)
 {
   bool StopServer = false;
 
-  LOG(("\r\nRunning HTML Server test\r\n"));
+  LOG(("\nRunning HTML Server test\r\n"));
   if (wifi_connect()!=0) return -1;
 
 
@@ -403,7 +415,7 @@ int wifi_server(void)
       LOG(("ERROR: failed to close current Server connection\r\n"));
       return -1;
     }
-    //HAL_Delay(1000);
+
   }
   while(StopServer == false);
 
@@ -419,24 +431,11 @@ int wifi_server(void)
 
 static bool WebServerProcess(void)
 {
-	HAL_TIM_Base_Start(&htim2);
-//	HAL_TIM_Base_Start_IT(&htim4);
-	sin_generate();
-	sin2_generate();
-	sin3_generate();
-  //uint8_t temp;
+  HAL_TIM_Base_Start(&htim2);
   uint16_t  respLen;
   static   uint8_t resp[1024];
   bool    stopserver=false;
-  //SendWebPage(LedState, temp);
-  float vol = 0, temperature = 0.0;
-  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-  HAL_ADC_ConfigChannel(&hadc1, &sConfig1);
-  HAL_ADC_Start(&hadc1);
-  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-  vol = 3.0f * (*VREFINT) / HAL_ADC_GetValue(&hadc1);
-  HAL_ADC_Stop(&hadc1);
-  //LedState = 0;
+
   if (WIFI_STATUS_OK == WIFI_ReceiveData(SOCKET, resp, 1000, &respLen, WIFI_READ_TIMEOUT))
   {
    LOG(("get %d byte from server\r\n",respLen));
@@ -446,28 +445,54 @@ static bool WebServerProcess(void)
       if(strstr((char *)resp, "GET")) /* GET: put web page */
       {
         temp = (int) BSP_TSENSOR_ReadTemp();
-        if (temp >32 && LedState == 0){
-			if(temp > 32 && temp < 39){
-				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin_samples,50,DAC_ALIGN_12B_R);
-				LedState = 0;
+        if (temp >35){
+			if(temp > 35 && temp < 37){
+				safetyLevel = 1;
 			}
-			else if(temp > 38 && temp < 46){
-				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin2_samples,40,DAC_ALIGN_12B_R);
-				LedState = 0;
+			else if(temp > 37 && temp < 42){
+				safetyLevel = 2;
+			}else{
+				safetyLevel = 3;
 			}
-			else if(temp > 45){
-				HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin3_samples,25,DAC_ALIGN_12B_R);
-				LedState = 0;
-			}
+			LedState = 0;
+        }else{
+        	safetyLevel = 0;
         }
-        else{
+        //earthquake
+		//BSP_GYRO_GetXYZ(gyro);
+		push_data_into_gyro_record();
+
+		float std_x=0;
+		float std_y=0;
+		float std_z=0;
+		arm_std_f32(&gyro_x,10,&std_x);
+		arm_std_f32(&gyro_y,10,&std_y);
+		arm_std_f32(&gyro_z,10,&std_z);
+		float shake = std_x + std_y + std_z;
+		if(shake < 30000){
+			safetyLevel=0;
+		}else if(shake > 30000 && shake < 45000){
+			safetyLevel=1;
+		}else if(shake > 45000 && shake < 70000){
+			safetyLevel=2;
+		}else{
+			safetyLevel=3;
+		}
+
+        if(safetyLevel>0){
+			if(safetyLevel==1){
+				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,G6,50,DAC_ALIGN_12B_R);
+			}
+			else if(safetyLevel==2){
+				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,E7,40,DAC_ALIGN_12B_R);
+			}else{
+				HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,A6,25,DAC_ALIGN_12B_R);
+			}
+			LedState = 0;
+        }else{
         	HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
         }
-        if(SendWebPage(LedState, temp,vol) != WIFI_STATUS_OK)
-        {
+        if(SendWebPage(LedState, temp, std_x , std_y , std_z) != WIFI_STATUS_OK){
           LOG(("> ERROR : Cannot send web page\r\n"));
         }
         else
@@ -479,20 +504,6 @@ static bool WebServerProcess(void)
        {
          LOG(("Post request\r\n"));
 
-         if(strstr((char *)resp, "radio"))
-         {
-           if(strstr((char *)resp, "radio=0"))
-           {
-             LedState = 0;
-             BSP_LED_On(LED2);
-           }
-           else if(strstr((char *)resp, "radio=1"))
-           {
-             LedState = 1;
-             BSP_LED_Off(LED2);
-           }
-           temp = (int) BSP_TSENSOR_ReadTemp();
-         }
          if(strstr((char *)resp, "stop_server"))
          {
            if(strstr((char *)resp, "stop_server=0"))
@@ -505,20 +516,29 @@ static bool WebServerProcess(void)
            }
          }
          temp = (int) BSP_TSENSOR_ReadTemp();
-         if(SendWebPage(LedState, temp,vol) != WIFI_STATUS_OK)
+ 		//BSP_GYRO_GetXYZ(gyro);
+ 		push_data_into_gyro_record();
+
+ 		float std_x=0;
+ 		float std_y=0;
+ 		float std_z=0;
+ 		arm_std_f32(&gyro_x,10,&std_x);
+ 		arm_std_f32(&gyro_y,10,&std_y);
+ 		arm_std_f32(&gyro_z,10,&std_z);
+         if(SendWebPage(LedState, temp,std_x , std_y , std_z) != WIFI_STATUS_OK)
          {
-           LOG(("> ERROR : Cannot send web page\r\n"));
+           LOG(("> ERROR : Cannot send web page\n"));
          }
          else
          {
-           LOG(("Send Page after POST command\r\n"));
+           LOG(("Send Page after POST command\n"));
          }
        }
      }
   }
   else
   {
-    LOG(("Client close connection\r\n"));
+    LOG(("Client close connection\n"));
   }
   return stopserver;
 
@@ -529,40 +549,46 @@ static bool WebServerProcess(void)
   * @param  None
   * @retval None
   */
-static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float voltage)
-{
+static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float std_x,float std_y, float std_z ){
   uint8_t  temp[50];
   uint16_t SentDataLength;
   WIFI_Status_t ret;
-
+  std_x=55;
+  std_y=101;
+  std_z=89;
   /* construct web page content */
   strcpy((char *)http, (char *)"HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nPragma: no-cache\r\n\r\n");
-  strcat((char *)http, (char *)"<html>\r\n<body>\r\n");
+  strcat((char *)http, (char *)"<html>\r\n");
+  strcat((char *)http, (char *)"<head>\r\n");
   strcat((char *)http, (char *)"<title>STM32 Web Server</title>\r\n");
-  strcat((char *)http, (char *)"<h2>ECSE 444 FINAL PROJECT - GROUP 6 </h2>\r\n");
+  strcat((char *)http, (char *)"<\head>\r\n");
+  strcat((char *)http, (char *)"<body>\r\n");
+  strcat((char *)http, (char *)"<style type=\"css\"> \r\n");
+  strcat((char *)http, (char *)"p input{ \r\n");
+  strcat((char *)http, (char *)"&nbsp&nbspwidth: 50 \r\n}\r\n");
+  strcat((char *)http, (char *)"</style>");
+  strcat((char *)http, (char *)"<h2><center>ECSE 444 FINAL PROJECT - Team 16 </center></h2>\r\n");
   strcat((char *)http, (char *)"<br /><hr>\r\n");
-  strcat((char *)http, (char *)"<p><form method=\"POST\"><strong>Temp: <input type=\"text\" value=\"");
+  strcat((char *)http, (char *)"<p><form method=\"POST\"><strong>Temperature: <input type=\"text\" value=\"");
   sprintf((char *)temp, "%d", temperature);
   strcat((char *)http, (char *)temp);
-  strcat((char *)http, (char *)"\"> <sup>O</sup>C");
-  strcat((char*)http,(char*)"<p><form method=\"POST\"><strong>Voltage: <input type=\"text\" value=\"");
-  memset(temp,0,sizeof(temp));
-  sprintf((char*)temp,"%f",voltage);
-  strcat((char*)http,(char*)temp);
-  strcat((char*)http,(char*)"\"> V");
+  strcat((char *)http, (char *)"\"> <sup>O</sup>C\r\n");
+  strcat((char *)http, (char *)"<br />");
+  strcat((char *)http, (char *)"<p><strong> Earthquake Level: <input type=\"text\" value=\"0\">   \r\n");
+  strcat((char *)http, (char *)"<br />");
+  strcat((char *)http, (char *)"<p>Gyro x: <input type=\"text\" value=\"");
+  sprintf((char *)temp, "%d", (int)std_x);
+  strcat((char *)http, (char *)temp);
+  strcat((char *)http, (char *)"\" width=20px> &nbsp&nbsp&nbsp&nbsp Gyro y: <input type=\"text\" value=\"");
+  sprintf((char *)temp, "%d", (int)std_y);
+  strcat((char *)http, (char *)temp);
+  strcat((char *)http, (char *)"\"> &nbsp&nbsp&nbsp&nbsp Gyro z: <input type=\"text\" value=\"");
+  sprintf((char *)temp, "%d", (int)std_z);
+  strcat((char *)http, (char *)temp);
+  strcat((char *)http, (char *)"\"> \r\n");
 
-  if (ledIsOn)
-  {
-    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" >Speaker on");
-    strcat((char *)http, (char *)"<br><input type=\"radio\" name=\"radio\" value=\"1\" checked>Speaker off");
-  }
-  else
-  {
-    strcat((char *)http, (char *)"<p><input type=\"radio\" name=\"radio\" value=\"0\" checked>Speaker on");
-    strcat((char *)http, (char *)"<br><input type=\"radio\" name=\"radio\" value=\"1\" >Speaker off");
-  }
 
-  strcat((char *)http, (char *)"</strong><p><input type=\"submit\"></form></span>");
+  strcat((char *)http, (char *)"</strong><p><input type=\"submit\"></form></span>\r\n");
   strcat((char *)http, (char *)"</body>\r\n</html>\r\n");
 
   ret = WIFI_SendData(0, (uint8_t *)http, strlen((char *)http), &SentDataLength, WIFI_WRITE_TIMEOUT);
@@ -571,109 +597,9 @@ static WIFI_Status_t SendWebPage(uint8_t ledIsOn, uint8_t temperature,float volt
   {
     ret = WIFI_STATUS_ERROR;
   }
-
   return ret;
 }
 
-/**
-  * @brief  System Clock Configuration
-  *         The system Clock is configured as follow :
-  *            System Clock source            = PLL (MSI)
-  *            SYSCLK(Hz)                     = 80000000
-  *            HCLK(Hz)                       = 80000000
-  *            AHB Prescaler                  = 1
-  *            APB1 Prescaler                 = 1
-  *            APB2 Prescaler                 = 1
-  *            MSI Frequency(Hz)              = 4000000
-  *            PLL_M                          = 1
-  *            PLL_N                          = 40
-  *            PLL_R                          = 2
-  *            PLL_P                          = 7
-  *            PLL_Q                          = 4
-  *            Flash Latency(WS)              = 4
-  * @param  None
-  * @retval None
-  */
-//static void SystemClock_Config(void)
-//{
-//  RCC_ClkInitTypeDef RCC_ClkInitStruct;
-//  RCC_OscInitTypeDef RCC_OscInitStruct;
-//
-//  /* MSI is enabled after System reset, activate PLL with MSI as source */
-//  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
-//  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-//  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
-//  RCC_OscInitStruct.MSICalibrationValue = RCC_MSICALIBRATION_DEFAULT;
-//  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-//  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-//  RCC_OscInitStruct.PLL.PLLM = 1;
-//  RCC_OscInitStruct.PLL.PLLN = 40;
-//  RCC_OscInitStruct.PLL.PLLR = 2;
-//  RCC_OscInitStruct.PLL.PLLP = 7;
-//  RCC_OscInitStruct.PLL.PLLQ = 4;
-//  if(HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-//  {
-//    /* Initialization Error */
-//    while(1);
-//  }
-//
-//  /* Select PLL as system clock source and configure the HCLK, PCLK1 and PCLK2
-//     clocks dividers */
-//  RCC_ClkInitStruct.ClockType = (RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2);
-//  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-//  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-//  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-//  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-//  if(HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
-//  {
-//    /* Initialization Error */
-//    while(1);
-//  }
-//}
-
-//void SystemClock_Config(void)
-//{
-//  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-//  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-//
-//  /** Configure the main internal regulator output voltage
-//  */
-//  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1_BOOST) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-//  /** Initializes the RCC Oscillators according to the specified parameters
-//  * in the RCC_OscInitTypeDef structure.
-//  */
-//  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
-//  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-//  RCC_OscInitStruct.MSICalibrationValue = 0;
-//  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
-//  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-//  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-//  RCC_OscInitStruct.PLL.PLLM = 1;
-//  RCC_OscInitStruct.PLL.PLLN = 60;
-//  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-//  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-//  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
-//  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-//  /** Initializes the CPU, AHB and APB buses clocks
-//  */
-//  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-//                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-//  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-//  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-//  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-//  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-//
-//  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
-//  {
-//    Error_Handler();
-//  }
-//}
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -731,8 +657,7 @@ void Button_Reset()
 /**
   * @brief Waiting for button to be pushed
   */
-uint8_t Button_WaitForPush(uint32_t delay)
-{
+uint8_t Button_WaitForPush(uint32_t delay){
   uint32_t time_out = HAL_GetTick() + delay;
 
   do
@@ -748,18 +673,17 @@ uint8_t Button_WaitForPush(uint32_t delay)
   return 0;
 }
 
+
 #if defined (TERMINAL_USE)
 /**
   * @brief  Retargets the C library printf function to the USART.
   * @param  None
   * @retval None
   */
-PUTCHAR_PROTOTYPE
-{
+PUTCHAR_PROTOTYPE{
   /* Place your implementation of fputc here */
   /* e.g. write a character to the USART1 and Loop until the end of transmission */
   HAL_UART_Transmit(&hDiscoUart, (uint8_t *)&ch, 1, 0xFFFF);
-
   return ch;
 }
 
@@ -836,8 +760,6 @@ void assert_failed(uint8_t* file, uint32_t line)
   * @param  GPIO_Pin: Specifies the port pin connected to corresponding EXTI line.
   * @retval None
   */
-int status_pin = 1;
-int count = 0;
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	switch (GPIO_Pin)
@@ -857,29 +779,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	      break;
 		}
 	  }
-	if(GPIO_Pin == GPIO_PIN_13){
-	if(status_pin == 0){
-		HAL_GPIO_WritePin(LED2_GPIO_PORT, LED2_PIN, GPIO_PIN_SET);
-		status_pin = 1;
-		count++;
-	}
-	else{
-		HAL_GPIO_WritePin(LED2_GPIO_PORT, LED2_PIN, GPIO_PIN_RESET);
-		status_pin = 0;
-	}
-//	if(fmod(count, 3) == 0){
-//		HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-//		HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin_samples,50,DAC_ALIGN_12B_R);
-//	}
-//	else if(fmod(count, 3) == 1){
-//		HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-//		HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin2_samples,40,DAC_ALIGN_12B_R);
-//	}
-//	else if(fmod(count, 3) == 2){
-//		HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
-//		HAL_DAC_Start_DMA(&hdac1,DAC_CHANNEL_1,sin3_samples,25,DAC_ALIGN_12B_R);
-//	}
-}
 }
 
 /**
@@ -6531,3 +6430,5 @@ void ADC_DMAError(DMA_HandleTypeDef *hdma)
   HAL_ADC_ErrorCallback(hadc);
 #endif /* USE_HAL_ADC_REGISTER_CALLBACKS */
 }
+
+

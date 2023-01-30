@@ -64,8 +64,8 @@ all: main-build
 main-build: lab7.elf secondary-outputs
 
 # Tool invocations
-lab7.elf lab7.map: $(OBJS) $(USER_OBJS) D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "lab7.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="lab7.map" -Wl,--gc-sections -static -L"D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\lib" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+lab7.elf lab7.map: $(OBJS) $(USER_OBJS) D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\Detection\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "lab7.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\Detection\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="lab7.map" -Wl,--gc-sections -static -L"D:\Mcgill\2022Fall\ECSE-444\lab\ECSE444_Final_Project\Detection\lib" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
